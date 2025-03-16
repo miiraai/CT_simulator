@@ -25,21 +25,17 @@ def show_values():
     print (n.get(), l.get())
 
 def openNewWindow():
-    global img
+    global img, file_model, file_sinogram, file_wynik
     newWindow = Toplevel(root)
-
-    newWindow.title("New Window")
-
-    newWindow.geometry("600x600")
-
-    Label(newWindow,
-          text="This is a new window")
+    newWindow.title("Simulation")
+    newWindow.geometry("900x900")
+    Label(newWindow, text="Simulation")
 
     button_exit = Button(newWindow,
                          text="Exit",
                          command=exit)
 
-    button_exit.grid(column=0, row=4)
+    button_exit.grid(column=0, row=9)
 
     if img:
         image_label_new = tk.Label(newWindow, image=img)
@@ -48,6 +44,33 @@ def openNewWindow():
     alpha_value = alpha.get()
     alpha_label = Label(newWindow, text=f"Delta Alpha = {alpha_value}", font=("Arial", 14))
     alpha_label.grid(column=0, row=1)
+
+    n_value = n.get()
+    n_value = Label(newWindow, text=f"n = {n_value}", font=("Arial", 14))
+    n_value.grid(column=0, row=2)
+
+    l_value = l.get()
+    l_value = Label(newWindow, text=f"l = {l_value}", font=("Arial", 14))
+    l_value.grid(column=0, row=3)
+
+    # zdjecie = PhotoImage(file="scans/Duolingo_Sharing.png")
+    # # image_label = tk.Label(root, image=zdjecie)
+    # # image_label.grid(column=0, row=10)
+
+    file_model = PhotoImage(file="modele/model.png")
+    model_label = tk.Label(newWindow, image=file_model)
+    model_label.grid(column=0, row=5)
+
+    file_sinogram = PhotoImage(file="modele/sinogram.png")
+    sin_label = tk.Label(newWindow, image=file_sinogram)
+    sin_label.grid(column=1, row=5)
+
+    file_wynik = PhotoImage(file="modele/wynik.png")
+    wynik_label = tk.Label(newWindow, image=file_wynik)
+    wynik_label.grid(column=2, row=5)
+
+    alpha_scale = Scale(newWindow, from_=1, to=180, resolution=alpha.get(), orient=HORIZONTAL, label="     delta alpha")
+    alpha_scale.grid(column=1, row=6)
 
 
 
@@ -84,7 +107,6 @@ if __name__ == "__main__":
     button_exit.grid(column=0, row=4)
 
 
-
     # # In/Out
     # tk.Label(root, text="In/Out").grid(row=0, column=0, sticky=tk.W)
     # direction = ttk.Combobox(root, values=["IN", "OUT"], state="readonly")
@@ -93,7 +115,7 @@ if __name__ == "__main__":
 
     nrow = 5
 
-    alpha = Scale(root, from_=1, to=180, orient=HORIZONTAL, label="     delta alpha")
+    alpha = Scale(root, from_=1, to=180, resolution=5, orient=HORIZONTAL, label="     delta alpha")
     alpha.grid(column=0, row=nrow)
 
     n = Scale(root, from_=0, to=180, orient=HORIZONTAL, label="              n")
