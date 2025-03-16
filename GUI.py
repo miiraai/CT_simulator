@@ -6,9 +6,49 @@ from tkinter import *
 
 
 def browseFiles():
-    filename = tk.filedialog.askopenfilename(initialdir = "/", title = "Select a File", filetypes = (("Text files",  "*.txt*"), ("all files", "*.*")))
+    global img
+    filename = filedialog.askopenfilename(
+        initialdir="/",
+        title="Select a File",
+        filetypes=(("PNG files", "*.png"), ("all files", "*.*"))
+    )
 
-    label_file_explorer.configure(text="File Opened: "+filename)
+    label_file_explorer.configure(text="File Opened: " + filename)
+
+    img = PhotoImage(file=filename)
+    image_label.configure(image=img)
+    image_label.image = img
+
+def show_values():
+    for i in range(0, 180, alpha.get()):
+        print("aplha = ", i)
+    print (n.get(), l.get())
+
+def openNewWindow():
+    global img
+    newWindow = Toplevel(root)
+
+    newWindow.title("New Window")
+
+    newWindow.geometry("600x600")
+
+    Label(newWindow,
+          text="This is a new window")
+
+    button_exit = Button(newWindow,
+                         text="Exit",
+                         command=exit)
+
+    button_exit.grid(column=0, row=4)
+
+    if img:
+        image_label_new = tk.Label(newWindow, image=img)
+        image_label_new.grid(column=0, row=0)
+
+    alpha_value = alpha.get()
+    alpha_label = Label(newWindow, text=f"Delta Alpha = {alpha_value}", font=("Arial", 14))
+    alpha_label.grid(column=0, row=1)
+
 
 
 if __name__ == "__main__":
@@ -28,7 +68,7 @@ if __name__ == "__main__":
     # Create a File Explorer label
     label_file_explorer = Label(root,
                                 text="File Explorer using Tkinter",
-                                width=100, height=4,
+                                width=80, height=4,
                                 fg="blue")
 
     button_explore = Button(root,
@@ -39,18 +79,47 @@ if __name__ == "__main__":
                          text="Exit",
                          command=exit)
 
-    label_file_explorer.grid(column=1, row=1)
+    label_file_explorer.grid(column=0, row=2)
+    button_explore.grid(column=0, row=3)
+    button_exit.grid(column=0, row=4)
 
-    button_explore.grid(column=1, row=2)
 
-    button_exit.grid(column=1, row=3)
 
-    # In/Out
-    tk.Label(frame, text="In/Out").grid(row=0, column=0, sticky=tk.W)
-    direction = ttk.Combobox(frame, values=["IN", "OUT"], state="readonly")
-    direction.grid(row=0, column=1, sticky=tk.EW)
-    direction.set("IN")
+    # # In/Out
+    # tk.Label(root, text="In/Out").grid(row=0, column=0, sticky=tk.W)
+    # direction = ttk.Combobox(root, values=["IN", "OUT"], state="readonly")
+    # direction.grid(row=1, column=0, sticky=tk.EW)
+    # direction.set("IN")
+
+    nrow = 5
+
+    alpha = Scale(root, from_=1, to=180, orient=HORIZONTAL, label="     delta alpha")
+    alpha.grid(column=0, row=nrow)
+
+    n = Scale(root, from_=0, to=180, orient=HORIZONTAL, label="              n")
+    n.grid(column=0, row=nrow + 1)
+
+    l = Scale(root, from_=0, to=180, orient=HORIZONTAL, label="              l")
+    l.grid(column=0, row=nrow + 2)
+
+    pokaz = tk.Button(root, text="Show", command=show_values)
+    pokaz.grid(column=0, row=nrow + 3)
+
+    # zdjecie = PhotoImage(file="scans/Duolingo_Sharing.png")
     #
+    # # image_label = tk.Label(root, image=zdjecie)
+    # # #image_label = tk.Label(root, image=zdjecie)
+    # # image_label.grid(column=0, row=10)
+
+    img = PhotoImage()
+    image_label = tk.Label(root, image=img)
+
+    nowe_okno = Button(root,
+                            text="Dalej",
+                            command=openNewWindow)
+    nowe_okno.grid(column=0, row=10)
+
+
     # # IP Ports
     # for i, field in enumerate(fields[1:-2], start=1):
     #     tk.Label(frame, text=field).grid(row=i, column=0, sticky=tk.W)
