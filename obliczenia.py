@@ -103,6 +103,8 @@ def calculate_sinogram(img, steps=60, span=120, num_rays=250, max_angle=180):
     :param span: - zakres promieni
     :param num_rays: - liczba promieni
     :param max_angle: - maksymalny kąt
+
+    :return ndarray odpowiadający sinogramowi
     """
     # Pusty ndarray wypełniany dalej sinogramem (czarny obraz)
     sinogram = np.zeros((steps, num_rays))
