@@ -1,5 +1,8 @@
 import streamlit as st
 from PIL import Image
+import matplotlib.pyplot as plt
+
+import io
 
 from obliczenia import *
 
@@ -30,7 +33,7 @@ if st.session_state.page == "main":
         # st.image(image, caption="Uploaded Image", use_container_width=True)
 
     if "image" in st.session_state:
-        st.image(st.session_state.image, caption="Chosen image", use_container_width=False)
+        st.image(st.session_state.image, use_container_width=False)
 
     if st.button("Go to first Page"):
         go_to_page("first")
@@ -62,22 +65,82 @@ elif st.session_state.page == "first":
 
     with col1:
         try:
-            model_img = Image.open("modele/model.png")
-            st.image(model_img, caption="Model")
+            st.image(st.session_state.image, caption="Model", use_container_width=False)
         except:
-            st.warning("model.png not found")
+            st.warning("No model available")
 
-    with col2:
+    with (col2):
         try:
-            sinogram_img = Image.open("modele/sinogram.png")
-            st.image(sinogram_img, caption="Sinogram")
+            img_array = np.array(st.session_state.image.convert("L")).astype(np.float32)
+
+            # Calculate sinogram
+            sinogram = calculate_sinogram(img_array, steps=180, span=120, num_rays=250, max_angle=180)
+            sinogram = np.transpose(sinogram)
+            st.session_state.sin = sinogram
+
+            # Use 1st and 99th percentile to clip out extreme outliers
+            vmin = np.percentile(sinogram, 1)
+            vmax = np.percentile(sinogram, 99)
+
+            # Plot with better contrast
+            fig, ax = plt.subplots()
+            ax.imshow(sinogram, cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
+            ax.axis('off')
+
+
+
+            st.pyplot(fig)
+
+
+
+            # sinogram = calculate_sinogram(st.session_state.image, steps=180, span=120, num_rays=250, max_angle=180)
+            #
+            # fig, ax = plt.subplots()
+            # ax.imshow(sinogram, cmap="gray")
+            # st.pyplot(fig)
+
+
+            # sinogram = calculate_sinogram(st.session_state.image, steps=180, span=120, num_rays=250, max_angle=180)
+            # st.image(sinogram, caption="Sinogram", use_container_width=False)
+
+            # sinogram_img = Image.open("modele/sinogram.png")
+            # st.image(sinogram_img, caption="Sinogram")
         except:
             st.warning("sinogram.png not found")
 
     with col3:
         try:
-            wynik_img = Image.open("modele/wynik.png")
-            st.image(wynik_img, caption="Wynik")
+            # st.write("ser igor")
+            img_array = np.array(st.session_state.image.convert("L")).astype(np.float32)
+
+            # st.write("jas mati")
+
+            # Calculate sinogram
+            sinogram = calculate_sinogram(img_array, steps=180, span=120, num_rays=250, max_angle=180)
+            reconstructed = reverse_radon_transform(img_array, sinogram, steps=180, span=120, num_rays=250, max_angle=180)
+
+            # Use 1st and 99th percentile to clip out extreme outliers
+            vmin = np.percentile(reconstructed, 1)
+            vmax = np.percentile(reconstructed, 99)
+            #
+            # st.write("jan to pala")
+
+            # Plot the reconstructed image
+            fig2, ax2 = plt.subplots()
+            ax2.imshow(reconstructed, cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
+            ax2.axis('off')
+
+            # st.write("Reconstructed shape:")
+            # st.write("Min:", np.min(reconstructed))
+            # st.write("Max:", np.max(reconstructed))
+            # st.write("Mean:", np.mean(reconstructed))
+            #
+            # # Show in Streamlit
+            st.pyplot(fig2)
+
+
+            # wynik_img = Image.open("modele/wynik.png")
+            # st.image(wynik_img, caption="Wynik")
         except:
             st.warning("wynik.png not found")
 
