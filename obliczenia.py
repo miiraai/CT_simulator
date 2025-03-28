@@ -1,10 +1,10 @@
 import numpy as np
-import math
 
 
-def get_parallel_rays(radius, pos, angle=45.0, span=120, num_rays=20):
+def get_parallel_rays(radius, pos, angle, span, num_rays):
     """
     Funkcja obliczająca współrzędne emitorów i detektorów dla zadanych parametrów
+
     :param radius: promień okręgu
     :param pos: środek badanego zdjęcia
     :param angle: kąt pod którym padają promienie (w równaniach oznaczany alfa)
@@ -45,6 +45,7 @@ def get_parallel_rays(radius, pos, angle=45.0, span=120, num_rays=20):
 def get_bresenham_points(x1, x2, y1, y2):
     """
     Funkcja obliczająca współrzędne promieni na podstawie algorytmu Bresenhama
+
     :param x1: - współrzędne x emitera
     :param x2: - współrzędne x detektora
     :param y1: - współrzędne y emitera
@@ -95,21 +96,24 @@ def get_bresenham_points(x1, x2, y1, y2):
         points.reverse()
     return points
 
-def calculate_sinogram(img, steps=60, span=120, num_rays=250, max_angle=180):
+def calculate_sinogram(img, steps, span, num_rays, max_angle):
     """
     Funkcja obliczająca sinogram obrazu wejściowego
+
     :param img: - ndarray obrazu wejściowego
     :param steps: - ilość kroków (emiterów oraz detektorów)
     :param span: - zakres promieni
     :param num_rays: - liczba promieni
     :param max_angle: - maksymalny kąt
+
+    :return ndarray odpowiadający sinogramowi
     """
     # Pusty ndarray wypełniany dalej sinogramem (czarny obraz)
     sinogram = np.zeros((steps, num_rays))
     for idx in range(steps):
         # Kąt padania promieni i współrzędne emiterów oraz detektorów
         angle = idx * (max_angle/steps)
-        rays = get_parallel_rays(max(img.shape[0]//2, img.shape[1]//2)*math.sqrt(2),
+        rays = get_parallel_rays(max(img.shape[0]//2, img.shape[1]//2) * np.sqrt(2),
                                  (img.shape[0]//2, img.shape[1]//2), angle, span, num_rays)
         for ray_idx, ray in enumerate(rays):
             # Współrzędne wiązek z emiterów
@@ -123,4 +127,42 @@ def calculate_sinogram(img, steps=60, span=120, num_rays=250, max_angle=180):
     # Transponujemy ponieważ format odpowiada formatowi danych zbieranych przez rzeczywisty
     # tomograf (każdy wiersz to wyniki uzyskane dla danego kąta), który powodowałby błędne
     # wykreślenie sinogramu
-    return np.transpose(sinogram)
+    return sinogram
+
+def normalize(sinogram):
+    """
+    Normalizacja wartości sinogramu
+    :param sinogram: - sinogram obrazu
+    :return: znormalizowany sinogram
+    """
+    return sinogram / np.linalg.norm(sinogram)
+
+def reverse_radon_transform(img, sinogram, steps=60, span=120, num_rays=250, max_angle=180):
+    """
+    Funkcja uzyskująca rekonstrukcję oryginalnego obrazu na podstawie sinogramu używając
+    odwróconej transformaty Radona
+
+    :param img: ndarray obrazu wejściowego
+    :param sinogram: - input sinogram
+    :param steps: - how many measurements there were in the sinogram construction
+    :param span: - span of the rays that created the sinogram
+    :param num_rays: - number of rays creating the sinogram
+    :param max_angle: - maximum angle the sinogram reached
+
+    :return: ndarray przedstawiąjący zrekonstruowany obraz wejściowy
+    """
+    out_image = np.zeros((img.shape[0], img.shape[1]))
+    maximum = -1
+
+    for idx in range(steps):
+        angle = idx * max_angle / steps
+        rays = get_parallel_rays(max(img.shape[0] // 2, img.shape[1] // 2) * np.sqrt(2),
+                                 (img.shape[0] // 2, img.shape[1] // 2), angle, span, num_rays)
+        for ray_idx, ray in enumerate(rays):
+            points = get_bresenham_points(ray[0][0], ray[0][1], ray[1][0], ray[1][1])
+            for point in points:
+                # Tylko dla punktów zawierających się w sinogramie
+                if (0 <= point[0] < img.shape[0]) and (0 <= point[1] < img.shape[1]):
+                    out_image[point[0]][point[1]] += sinogram[idx][ray_idx]
+                    maximum = max(maximum, out_image[point[0]][point[1]])
+    return normalize(out_image)
