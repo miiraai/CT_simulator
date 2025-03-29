@@ -1,5 +1,7 @@
+import math
 import numpy as np
 
+#TODO dodac typy zmiennych
 
 def get_parallel_rays(radius, pos, angle, span, num_rays):
     """
@@ -129,30 +131,21 @@ def calculate_sinogram(img, steps, span, num_rays, max_angle):
     # wykreślenie sinogramu
     return sinogram
 
-def normalize(sinogram):
-    """
-    Normalizacja wartości sinogramu
-    :param sinogram: - sinogram obrazu
-    :return: znormalizowany sinogram
-    """
-    return sinogram / np.linalg.norm(sinogram)
-
 def reverse_radon_transform(img, sinogram, steps=60, span=120, num_rays=250, max_angle=180):
     """
     Funkcja uzyskująca rekonstrukcję oryginalnego obrazu na podstawie sinogramu używając
     odwróconej transformaty Radona
 
-    :param img: ndarray obrazu wejściowego
-    :param sinogram: - input sinogram
-    :param steps: - how many measurements there were in the sinogram construction
-    :param span: - span of the rays that created the sinogram
-    :param num_rays: - number of rays creating the sinogram
-    :param max_angle: - maximum angle the sinogram reached
+    :param img: - ndarray obrazu wejściowego
+    :param sinogram: - sinogram wejściowy
+    :param steps: - ilość kroków (emiterów oraz detektorów)
+    :param span: - zakres promieni
+    :param num_rays: - liczba promieni
+    :param max_angle: - maksymalny kąt
 
     :return: ndarray przedstawiąjący zrekonstruowany obraz wejściowy
     """
     out_image = np.zeros((img.shape[0], img.shape[1]))
-    maximum = -1
 
     for idx in range(steps):
         angle = idx * max_angle / steps
@@ -164,5 +157,80 @@ def reverse_radon_transform(img, sinogram, steps=60, span=120, num_rays=250, max
                 # Tylko dla punktów zawierających się w sinogramie
                 if (0 <= point[0] < img.shape[0]) and (0 <= point[1] < img.shape[1]):
                     out_image[point[0]][point[1]] += sinogram[idx][ray_idx]
-                    maximum = max(maximum, out_image[point[0]][point[1]])
-    return normalize(out_image)
+
+    return out_image
+
+def create_kernel(size, kernel_type):
+    """
+    Tworzenie kernela w zależności od podanej wielkości i typu.
+    Dopuszczalne typy to: rampowy (Ram-Lak), Shepp-Logan, Cosine, Hamming, Hann
+
+    :param size: wielkość kernela
+    :param kernel_type: typ kernela
+
+    :return: wyjściowy kernel o danym size i type
+    """
+    kernel = np.zeros(size, dtype=np.float64)
+    kernel_center = len(kernel) // 2
+
+    match kernel_type:
+        case 'ramp':
+            for i in range(size):
+                if i == kernel_center:
+                    kernel[i] = 1.0
+                elif i % 2 == 0:
+                    kernel[i] = 0.0
+                else:
+                    dist = i - kernel_center
+                    kernel[i] = (-4.0 / (math.pi ** 2)) / (dist ** 2)
+        case 'shepp-logan':
+            for i in range(size):
+                if i == kernel_center:
+                    kernel[i] = 1.0
+                elif i % 2 == 0:
+                    kernel[i] = 0.0
+                else:
+                    dist = i - kernel_center
+                    sinc = math.sin(math.pi * dist / (2 * kernel_center)) / (math.pi * dist / (2 * kernel_center))
+                    kernel[i] = (-4.0 / (math.pi ** 2)) / (dist ** 2) * sinc
+        case 'hamming':
+            for i in range(size):
+                if i == kernel_center:
+                    kernel[i] = 1.0
+                elif i % 2 == 0:
+                    kernel[i] = 0.0
+                else:
+                    dist = i - kernel_center
+                    window = 0.54 - 0.46 * math.cos(2 * math.pi * i / (size - 1))
+                    kernel[i] = (-4.0 / (math.pi ** 2)) / (dist ** 2) * window
+        case 'hanning':
+            for i in range(size):
+                if i == kernel_center:
+                    kernel[i] = 1.0
+                elif i % 2 == 0:
+                    kernel[i] = 0.0
+                else:
+                    dist = i - kernel_center
+                    window = 0.5 * (1 - math.cos(2 * math.pi * i / (size - 1)))
+                    kernel[i] = (-4.0 / (math.pi ** 2)) / (dist ** 2) * window
+        case _:
+            raise ValueError("No such kernel type")
+
+    return kernel
+
+
+def convolve_sinogram(sinogram, kernel):
+    """
+    Dokonuje konwolucji każdego wiersza (projekcji) sinogramu z podanym jądrem
+
+    :param sinogram: macierz sinogramu
+    :param kernel: 1D jądro filtra
+
+    :return: ndarray przefiltrowanego sinogramu
+    """
+    width, height = sinogram.shape
+    out = np.zeros_like(sinogram)
+    for i in range(width):
+        # mode='same' - wynik tej samej długości co wejście
+        out[i, :] = np.convolve(sinogram[i, :], kernel, mode='same')
+    return out
