@@ -98,7 +98,7 @@ def get_bresenham_points(x1, x2, y1, y2):
         points.reverse()
     return points
 
-def calculate_sinogram(img, steps, span, num_rays, max_angle):
+def calculate_sinogram(img, steps, span, num_rays, max_angle, intermediate=False):
     """
     Funkcja obliczająca sinogram obrazu wejściowego
 
@@ -112,6 +112,9 @@ def calculate_sinogram(img, steps, span, num_rays, max_angle):
     """
     # Pusty ndarray wypełniany dalej sinogramem (czarny obraz)
     sinogram = np.zeros((steps, num_rays))
+    if intermediate:
+        iterations = []
+
     for idx in range(steps):
         # Kąt padania promieni i współrzędne emiterów oraz detektorów
         angle = idx * (max_angle/steps)
@@ -126,12 +129,17 @@ def calculate_sinogram(img, steps, span, num_rays, max_angle):
                 if (0 <= point[0] < img.shape[0]) and (0 <= point[1] < img.shape[1]):
                     emitter_value += img[point[0]][point[1]]
             sinogram[idx][ray_idx] = emitter_value
+        if intermediate:
+            iterations.append(sinogram)
     # Transponujemy ponieważ format odpowiada formatowi danych zbieranych przez rzeczywisty
     # tomograf (każdy wiersz to wyniki uzyskane dla danego kąta), który powodowałby błędne
     # wykreślenie sinogramu
-    return sinogram
+    if intermediate:
+        return iterations
+    else:
+        return sinogram
 
-def reverse_radon_transform(img, sinogram, steps=60, span=120, num_rays=250, max_angle=180):
+def reverse_radon_transform(img, sinogram, steps, span, num_rays, max_angle, intermediate=False):
     """
     Funkcja uzyskująca rekonstrukcję oryginalnego obrazu na podstawie sinogramu używając
     odwróconej transformaty Radona
@@ -146,6 +154,8 @@ def reverse_radon_transform(img, sinogram, steps=60, span=120, num_rays=250, max
     :return: ndarray przedstawiąjący zrekonstruowany obraz wejściowy
     """
     out_image = np.zeros((img.shape[0], img.shape[1]))
+    if intermediate:
+        iterations = []
 
     for idx in range(steps):
         angle = idx * max_angle / steps
@@ -157,8 +167,12 @@ def reverse_radon_transform(img, sinogram, steps=60, span=120, num_rays=250, max
                 # Tylko dla punktów zawierających się w sinogramie
                 if (0 <= point[0] < img.shape[0]) and (0 <= point[1] < img.shape[1]):
                     out_image[point[0]][point[1]] += sinogram[idx][ray_idx]
+                    if intermediate: iterations.append(out_image)
 
-    return out_image
+    if intermediate:
+        return iterations
+    else:
+        return out_image
 
 def create_kernel(size, kernel_type):
     """
