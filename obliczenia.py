@@ -1,7 +1,7 @@
+import copy
 import math
 import numpy as np
-
-#TODO dodac typy zmiennych
+from scipy.signal import convolve2d
 
 def get_parallel_rays(radius, pos, angle, span, num_rays):
     """
@@ -98,6 +98,7 @@ def get_bresenham_points(x1, x2, y1, y2):
         points.reverse()
     return points
 
+
 def calculate_sinogram(img, steps, span, num_rays, max_angle, intermediate=False):
     """
     Funkcja obliczająca sinogram obrazu wejściowego
@@ -107,6 +108,7 @@ def calculate_sinogram(img, steps, span, num_rays, max_angle, intermediate=False
     :param span: - zakres promieni
     :param num_rays: - liczba promieni
     :param max_angle: - maksymalny kąt
+    :param intermediate: możliwość uzyskania wyników pośrednich jeżeli True
 
     :return ndarray odpowiadający sinogramowi
     """
@@ -130,10 +132,11 @@ def calculate_sinogram(img, steps, span, num_rays, max_angle, intermediate=False
                     emitter_value += img[point[0]][point[1]]
             sinogram[idx][ray_idx] = emitter_value
         if intermediate:
-            iterations.append(sinogram)
-    # Transponujemy ponieważ format odpowiada formatowi danych zbieranych przez rzeczywisty
-    # tomograf (każdy wiersz to wyniki uzyskane dla danego kąta), który powodowałby błędne
-    # wykreślenie sinogramu
+            iterations.append(copy.deepcopy(sinogram))
+
+    # By wyświetlić prawidłowo trezeba transponować ponieważ format odpowiada formatowi
+    # danych zbieranych przez rzeczywisty tomograf (każdy wiersz to wyniki uzyskane
+    # dla danego kąta), który powodowałby błędne wykreślenie sinogramu
     if intermediate:
         return iterations
     else:
@@ -150,6 +153,7 @@ def reverse_radon_transform(img, sinogram, steps, span, num_rays, max_angle, int
     :param span: - zakres promieni
     :param num_rays: - liczba promieni
     :param max_angle: - maksymalny kąt
+    :param intermediate: możliwość uzyskania wyników pośrednich jeżeli True
 
     :return: ndarray przedstawiąjący zrekonstruowany obraz wejściowy
     """
@@ -167,84 +171,90 @@ def reverse_radon_transform(img, sinogram, steps, span, num_rays, max_angle, int
                 # Tylko dla punktów zawierających się w sinogramie
                 if (0 <= point[0] < img.shape[0]) and (0 <= point[1] < img.shape[1]):
                     out_image[point[0]][point[1]] += sinogram[idx][ray_idx]
-                    if intermediate: iterations.append(out_image)
+                    if intermediate:
+                        iterations.append(copy.deepcopy(out_image))
 
     if intermediate:
         return iterations
     else:
-        return out_image
+        return normalize(out_image)
 
-def create_kernel(size, kernel_type):
+def normalize(img):
+    return (img - img.min()) / (img.max() - img.min())
+
+def __create_kernel(size, kernel_type):
     """
-    Tworzenie kernela w zależności od podanej wielkości i typu.
-    Dopuszczalne typy to: rampowy (Ram-Lak), Shepp-Logan, Cosine, Hamming, Hann
+    Tworzy dwuwymiarowy kernel (jądro filtra) na podstawie podanego rozmiaru i typu.
+    Dostępne typy: 'ramp' (Ram-Lak), 'shepp-logan', 'cosine', 'hamming', 'hanning'
 
-    :param size: wielkość kernela
-    :param kernel_type: typ kernela
-
-    :return: wyjściowy kernel o danym size i type
+    :param size: rozmiar kwadratowego kernela (np. 51 oznacza kernel 51x51)
+    :param kernel_type: typ kernela (jeden z dopuszczalnych ciągów znaków)
+    :return: 2D ndarray o wymiarach (size, size) reprezentujący jądro filtra
     """
-    kernel = np.zeros(size, dtype=np.float64)
-    kernel_center = len(kernel) // 2
+    one_d = np.zeros(size, dtype=np.float64)
+    center = size // 2
 
-    match kernel_type:
-        case 'ramp':
-            for i in range(size):
-                if i == kernel_center:
-                    kernel[i] = 1.0
-                elif i % 2 == 0:
-                    kernel[i] = 0.0
-                else:
-                    dist = i - kernel_center
-                    kernel[i] = (-4.0 / (math.pi ** 2)) / (dist ** 2)
-        case 'shepp-logan':
-            for i in range(size):
-                if i == kernel_center:
-                    kernel[i] = 1.0
-                elif i % 2 == 0:
-                    kernel[i] = 0.0
-                else:
-                    dist = i - kernel_center
-                    sinc = math.sin(math.pi * dist / (2 * kernel_center)) / (math.pi * dist / (2 * kernel_center))
-                    kernel[i] = (-4.0 / (math.pi ** 2)) / (dist ** 2) * sinc
-        case 'hamming':
-            for i in range(size):
-                if i == kernel_center:
-                    kernel[i] = 1.0
-                elif i % 2 == 0:
-                    kernel[i] = 0.0
-                else:
-                    dist = i - kernel_center
-                    window = 0.54 - 0.46 * math.cos(2 * math.pi * i / (size - 1))
-                    kernel[i] = (-4.0 / (math.pi ** 2)) / (dist ** 2) * window
-        case 'hanning':
-            for i in range(size):
-                if i == kernel_center:
-                    kernel[i] = 1.0
-                elif i % 2 == 0:
-                    kernel[i] = 0.0
-                else:
-                    dist = i - kernel_center
-                    window = 0.5 * (1 - math.cos(2 * math.pi * i / (size - 1)))
-                    kernel[i] = (-4.0 / (math.pi ** 2)) / (dist ** 2) * window
-        case _:
-            raise ValueError("No such kernel type")
+    for i in range(size):
+        if i == center:
+            one_d[i] = 1.0
+        elif i % 2 == 0:
+            one_d[i] = 0.0
+        else:
+            dist = i - center
+            if kernel_type == 'ramp':
+                one_d[i] = (-4.0 / (math.pi ** 2)) / (dist ** 2)
+            elif kernel_type == 'shepp-logan':
+                # Unikanie dzielenia przez zero przy obliczeniach sinc
+                sinc = math.sin(math.pi * dist / (2 * center)) / (math.pi * dist / (2 * center))
+                one_d[i] = (-4.0 / (math.pi ** 2)) / (dist ** 2) * sinc
+            elif kernel_type == 'hamming':
+                window = 0.54 - 0.46 * math.cos(2 * math.pi * i / (size - 1))
+                one_d[i] = (-4.0 / (math.pi ** 2)) / (dist ** 2) * window
+            elif kernel_type == 'hanning':
+                window = 0.5 * (1 - math.cos(2 * math.pi * i / (size - 1)))
+                one_d[i] = (-4.0 / (math.pi ** 2)) / (dist ** 2) * window
+            elif kernel_type == 'cosine':
+                window = math.cos(math.pi * dist / (2 * center))
+                one_d[i] = (-4.0 / (math.pi ** 2)) / (dist ** 2) * window
+            else:
+                raise ValueError(
+                    "Niepoprawny typ kernela. Dozwolone typy: 'ramp', 'shepp-logan', 'cosine', 'hamming', 'hanning'")
 
+    # Tworzymy kernel 2D jako produkt zewnętrzny jądra jednowymiarowego
+    kernel = np.outer(one_d, one_d)
     return kernel
 
 
-def convolve_sinogram(sinogram, kernel):
-    """
-    Dokonuje konwolucji każdego wiersza (projekcji) sinogramu z podanym jądrem
+def create_shepp_logan_kernel(size):
+    kernel_1d = np.zeros(size, dtype=np.float64)
+    center = size // 2
 
-    :param sinogram: macierz sinogramu
-    :param kernel: 1D jądro filtra
+    for i in range(size):
+        if i == center:
+            kernel_1d[i] = 1.0
+        elif i % 2 == 0:
+            kernel_1d[i] = 0.0
+        else:
+            dist = i - center
+            arg = math.pi * dist / (2 * center)
+            sinc = math.sin(arg) / arg if arg != 0 else 1.0
+            kernel_1d[i] = (-4.0 / (math.pi ** 2)) / (dist ** 2) * sinc
 
-    :return: ndarray przefiltrowanego sinogramu
+    kernel_2d = np.outer(kernel_1d, kernel_1d)
+    return kernel_2d
+
+def filter_sinogram(sinogram, kernel):
     """
-    width, height = sinogram.shape
-    out = np.zeros_like(sinogram)
-    for i in range(width):
-        # mode='same' - wynik tej samej długości co wejście
-        out[i, :] = np.convolve(sinogram[i, :], kernel, mode='same')
-    return out
+    Dokonuje dwuwymiarowego splotu sinogramu z podanym 2D kernelem.
+
+    :param sinogram: macierz sinogramu (2D ndarray)
+    :param kernel: dwuwymiarowy jądro filtra (2D ndarray)
+    :return: ndarray przefiltrowanego sinogramu o tych samych wymiarach co wejściowy
+    """
+    # Wykonywany jest splot 2D z trybem 'same', który zapewnia, że wynik ma te same wymiary co macierz wejściowa.
+    filtered = convolve2d(sinogram, kernel, mode='same', boundary='fill', fillvalue=0)
+    return filtered
+
+
+def rmse(img1, img2):
+    return np.sqrt(np.mean(np.square(img1 - img2)))
