@@ -11,6 +11,7 @@ import io
 
 from obliczenia import *
 
+
 @st.cache_data
 def compute_sinogram(img, steps, span, num_rays, max_angle, intermediate=False):
     return calculate_sinogram(img, steps, span, num_rays, max_angle, intermediate)
@@ -20,10 +21,15 @@ def compute_sinogram(img, steps, span, num_rays, max_angle, intermediate=False):
 def compute_reconstruction(img, sinogram, steps, span, num_rays, max_angle, intermediate=False):
     return reverse_radon_transform(img, sinogram, steps, span, num_rays, max_angle, intermediate)
 
+
 @st.cache_data
 def compute_filter(sin):
+    sinogram = []
     kernel = create_shepp_logan_kernel(9)
-    return filter_sinogram(sin, kernel)
+
+    for i in sin:
+        sinogram.append(filter_sinogram(i, kernel))
+    return sinogram
 
 
 def save_as_dicom(image_array, filename, patient_name, patient_id, study_date, comments):
@@ -32,6 +38,7 @@ def save_as_dicom(image_array, filename, patient_name, patient_id, study_date, c
         image_array = (image_array / image_array.max() * 65535).astype("uint16")
 
     if len(image_array.shape) != 2:
+        print(image_array.shape)
         raise ValueError("Image must be 2D grayscale.")
 
     # Create file meta
@@ -100,6 +107,7 @@ if "page" not in st.session_state:
 def go_to_page(page_name):
     st.session_state.page = page_name
 
+
 global x
 x = False
 
@@ -112,7 +120,6 @@ anim = False
 global fil
 fil = False
 
-
 if st.session_state.page == "main":
     st.title("CT Simulator - Main Page")
 
@@ -123,17 +130,20 @@ if st.session_state.page == "main":
         st.session_state.uploaded_file = uploaded_file
 
         if file_type == "dcm":
-            x = True
+            st.session_state.x = True
             dcm = pydicom.dcmread(uploaded_file)
             pixel_array = dcm.pixel_array
 
             st.session_state.name = dcm.get('PatientName', 'Unknown')
+            st.session_state.date = dcm.get('StudyDate', 'Unknown')
+            st.session_state.comm = dcm.get('ImageComments', 'Unknown')
+            st.session_state.id = dcm.get('PatientID', 'Unknown')
 
             image_8bit = ((pixel_array - np.min(pixel_array)) / (np.ptp(pixel_array)) * 255.0).astype(np.uint8)
             image = Image.fromarray(image_8bit)
 
         else:
-            x = False
+            st.session_state.x = False
             image = Image.open(uploaded_file)
 
         st.session_state.image = image
@@ -144,12 +154,16 @@ if st.session_state.page == "main":
     fil = st.checkbox("Show filter", value=False)
 
     if st.button("Go to the simulation"):
+        abc = st.session_state.get("x", None)
         if 'image' not in st.session_state:
             st.write(":red[Select a file]")
         else:
             if fil:
-                go_to_page("second")
-            elif not x:
+                if abc:
+                    go_to_page("fourth")
+                else:
+                    go_to_page("second")
+            elif not abc:
                 go_to_page("first")
             else:
                 go_to_page("third")
@@ -167,7 +181,8 @@ if st.session_state.page == "main":
 elif st.session_state.page == "first":
     st.title("Simulation")
 
-    st.markdown(f"**Delta Alpha:** {st.session_state.get('alpha', 'Not Set')}, **n:** {st.session_state.get('n', 'Not Set')}, **l:** {st.session_state.get('l', 'Not Set')}")
+    st.markdown(
+        f"**Delta Alpha:** {st.session_state.get('alpha', 'Not Set')}, **n:** {st.session_state.get('n', 'Not Set')}, **l:** {st.session_state.get('l', 'Not Set')}")
 
     steps = 180 // st.session_state.alpha
     st.session_state.step = st.slider("step", min_value=1, max_value=steps, value=steps)
@@ -175,14 +190,14 @@ elif st.session_state.page == "first":
     if st.button("show animation"):
         anim = True
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, _ = st.columns(4)
 
     with col1:
         st.image(st.session_state.image, caption="Model", use_container_width=True)
     with col2:
         img_array = np.array(st.session_state.image.convert("L")).astype(np.float32)
 
-        with st.spinner("Obliczanie sinogramu..."):
+        with st.spinner("Computing the sinogram..."):
             sinogram = compute_sinogram(img_array, steps=steps, span=st.session_state.get('l', '120'),
                                         num_rays=st.session_state.get('n', '250'), max_angle=180, intermediate=True)
 
@@ -193,7 +208,8 @@ elif st.session_state.page == "first":
 
         if anim == False:
             fig, ax = plt.subplots(figsize=(2, 2))
-            ax.imshow(np.transpose(sinogram[st.session_state.get("step", 0) - 1]), cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
+            ax.imshow(np.transpose(sinogram[st.session_state.get("step", 0) - 1]), cmap="gray", aspect='auto',
+                      vmin=vmin, vmax=vmax)
             ax.axis('off')
 
             st.pyplot(fig, use_container_width=True)
@@ -206,20 +222,22 @@ elif st.session_state.page == "first":
                 ax.axis('off')
 
                 placeholder.pyplot(fig, use_container_width=True)
-                sleep(1/steps)
-
+                sleep(1 / steps)
 
     with col3:
-        with st.spinner("Obliczanie rekonstrukcji..."):
-            reconstructed = compute_reconstruction(img_array, sinogram[steps - 1], steps=steps, span=st.session_state.get('l', '120'),
-                                                   num_rays=st.session_state.get('n', '250'), max_angle=180, intermediate=True)
+        with st.spinner("Computing the reconstructed image..."):
+            reconstructed = compute_reconstruction(img_array, sinogram[steps - 1], steps=steps,
+                                                   span=st.session_state.get('l', '120'),
+                                                   num_rays=st.session_state.get('n', '250'), max_angle=180,
+                                                   intermediate=True)
 
-        vmin = np.percentile(reconstructed, 1)
-        vmax = np.percentile(reconstructed, 99)
+        vmin = np.percentile(reconstructed[-1], 1)
+        vmax = np.percentile(reconstructed[-1], 99)
 
         if anim == False:
             fig2, ax2 = plt.subplots(figsize=(2, 2))
-            ax2.imshow(reconstructed[st.session_state.get("step", 0) - 1], cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
+            ax2.imshow(reconstructed[st.session_state.get("step", 0) - 1], cmap="gray", aspect='auto', vmin=vmin,
+                       vmax=vmax)
             ax2.axis('off')
 
             st.pyplot(fig2, use_container_width=True)
@@ -232,11 +250,11 @@ elif st.session_state.page == "first":
                 ax.axis('off')
 
                 placeholder.pyplot(fig, use_container_width=True)
-                sleep(1/steps)
+                sleep(1 / steps)
 
             anim = False
 
-    st.success("Proces zakończony!")
+    st.success("Process finished!")
 
     kernel = create_shepp_logan_kernel(9)
 
@@ -245,7 +263,7 @@ elif st.session_state.page == "first":
     study_date = st.date_input("Study Date", value=datetime.date.today())
     comments = st.text_input("Comments")
 
-    image_array = (reconstructed / np.max(reconstructed) * 65535).astype(np.uint16)
+    image_array = (reconstructed[-1] / np.max(reconstructed[-1]) * 65535).astype(np.uint16)
 
     if st.button("Save DICOM"):
         save_as_dicom(image_array, "zapisane_dicom.dcm", patient_name, patient_id, study_date, comments)
@@ -256,7 +274,8 @@ elif st.session_state.page == "first":
 elif st.session_state.page == "third":
     st.title("Simulation")
 
-    st.markdown(f"**Delta Alpha:** {st.session_state.get('alpha', 'Not Set')}, **n:** {st.session_state.get('n', 'Not Set')}, **l:** {st.session_state.get('l', 'Not Set')}")
+    st.markdown(
+        f"**Delta Alpha:** {st.session_state.get('alpha', 'Not Set')}, **n:** {st.session_state.get('n', 'Not Set')}, **l:** {st.session_state.get('l', 'Not Set')}")
 
     steps = 180 // st.session_state.alpha
     st.session_state.step = st.slider("step", min_value=1, max_value=steps, value=steps)
@@ -264,14 +283,14 @@ elif st.session_state.page == "third":
     if st.button("show animation"):
         anim = True
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, _ = st.columns(4)
 
     with col1:
         st.image(st.session_state.image, caption="Model", use_container_width=True)
     with col2:
         img_array = np.array(st.session_state.image.convert("L")).astype(np.float32)
 
-        with st.spinner("Obliczanie sinogramu..."):
+        with st.spinner("Computing the sinogram..."):
             sinogram = compute_sinogram(img_array, steps=steps, span=st.session_state.get('l', '120'),
                                         num_rays=st.session_state.get('n', '250'), max_angle=180, intermediate=True)
 
@@ -282,7 +301,8 @@ elif st.session_state.page == "third":
 
         if anim == False:
             fig, ax = plt.subplots(figsize=(2, 2))
-            ax.imshow(np.transpose(sinogram[st.session_state.get("step", 0) - 1]), cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
+            ax.imshow(np.transpose(sinogram[st.session_state.get("step", 0) - 1]), cmap="gray", aspect='auto',
+                      vmin=vmin, vmax=vmax)
             ax.axis('off')
 
             st.pyplot(fig, use_container_width=True)
@@ -295,17 +315,152 @@ elif st.session_state.page == "third":
                 ax.axis('off')
 
                 placeholder.pyplot(fig, use_container_width=True)
-                sleep(1/steps)
-
+                sleep(1 / steps)
 
     with col3:
-        with st.spinner("Obliczanie rekonstrukcji..."):
-            reconstructed = compute_reconstruction(img_array, sinogram[steps - 1], steps=steps, span=st.session_state.get('l', '120'),
+        with st.spinner("Computing the reconstructed image..."):
+            reconstructed = compute_reconstruction(img_array, sinogram[steps - 1], steps=steps,
+                                                   span=st.session_state.get('l', '120'),
+                                                   num_rays=st.session_state.get('n', '250'), max_angle=180,
+                                                   intermediate=True)
+
+        vmin = np.percentile(reconstructed[-1], 1)
+        vmax = np.percentile(reconstructed[-1], 99)
+
+        if anim == False:
+            fig2, ax2 = plt.subplots(figsize=(2, 2))
+            ax2.imshow(reconstructed[st.session_state.get("step", 0) - 1], cmap="gray", aspect='auto', vmin=vmin,
+                       vmax=vmax)
+            ax2.axis('off')
+
+            st.pyplot(fig2, use_container_width=True)
+
+        else:
+            placeholder = st.empty()
+            for i in range(steps):
+                fig, ax = plt.subplots(figsize=(2, 2))
+                ax.imshow(reconstructed[i], cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
+                ax.axis('off')
+
+                placeholder.pyplot(fig, use_container_width=True)
+                sleep(1 / steps)
+
+            anim = False
+
+    st.success("Process finished!")
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        st.write("Input patient's data")
+
+        patient_name = st.text_input("Patient Name")
+        patient_id = st.text_input("Patient ID")
+        study_date = st.date_input("Study Date", value=datetime.date.today())
+        comments = st.text_input("Comments")
+
+        image_array = (reconstructed[-1] / np.max(reconstructed[-1]) * 65535).astype(np.uint16)
+
+        if st.button("Save DICOM"):
+            save_as_dicom(image_array, "zapisane_dicom.dcm", patient_name, patient_id, study_date, comments)
+
+    with c2:
+        st.write("Patient's name from .dcm file")
+
+        st.text_input("Name", st.session_state.get("name", None), disabled=True)
+        st.text_input("ID", st.session_state.get("id", None), disabled=True)
+        st.text_input("Date", st.session_state.get("date", None), disabled=True)
+        st.text_input("Comments", st.session_state.get("comm", None), disabled=True)
+
+    if st.button("Back to Main Page"):
+        go_to_page("main")
+
+elif st.session_state.page == "second":
+    st.title("Simulation")
+
+    st.write("filtr")
+
+    st.markdown(
+        f"**Delta Alpha:** {st.session_state.get('alpha', 'Not Set')}, **n:** {st.session_state.get('n', 'Not Set')}, **l:** {st.session_state.get('l', 'Not Set')}")
+
+    steps = 180 // st.session_state.alpha
+    st.session_state.step = st.slider("step", min_value=1, max_value=steps, value=steps)
+    if st.button("show animation"):
+        anim = True
+
+    col1, col2, col3, _ = st.columns(4)
+
+    with col1:
+        st.image(st.session_state.image, caption="Model", use_container_width=True)
+
+    with col2:
+        img_array = np.array(st.session_state.image.convert("L")).astype(np.float32)
+
+        steps = 180 // st.session_state.alpha
+
+        with st.spinner("Computing the sinogram..."):
+            sinogram = compute_sinogram(img_array, steps=steps, span=st.session_state.get('l', '120'),
+                                        num_rays=st.session_state.get('n', '250'), max_angle=180, intermediate=True)
+
+        sin = np.transpose(sinogram[-1])
+
+        vmin = np.percentile(sin, 1)
+        vmax = np.percentile(sin, 99)
+
+        if anim == False:
+            fig, ax = plt.subplots(figsize=(2, 2))
+            ax.imshow(np.transpose(sinogram[st.session_state.get("step", 0) - 1]), cmap="gray", aspect='auto',
+                      vmin=vmin, vmax=vmax)
+            ax.axis('off')
+
+            st.pyplot(fig, use_container_width=True)
+
+        elif anim == True:
+            placeholder = st.empty()
+            for i in range(steps):
+                fig, ax = plt.subplots(figsize=(2, 2))
+                ax.imshow(np.transpose(sinogram[i]), cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
+                ax.axis('off')
+
+                placeholder.pyplot(fig, use_container_width=True)
+                sleep(1 / steps)
+
+    with col3:
+        img_array = np.array(st.session_state.image.convert("L")).astype(np.float32)
+
+        steps = 180 // st.session_state.alpha
+
+        with st.spinner("Computing the sinogram with filter..."):
+            filtr_sin = compute_filter(sinogram)
+
+        vmin = np.percentile(filtr_sin[-1], 1)
+        vmax = np.percentile(filtr_sin[-1], 99)
+
+        if anim == False:
+            fig, ax = plt.subplots(figsize=(2, 2))
+            ax.imshow(np.transpose(filtr_sin[st.session_state.get("step", 0) - 1]), cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
+            ax.axis('off')
+            st.pyplot(fig, use_container_width=True)
+
+        elif anim == True:
+            placeholder = st.empty()
+            for i in range(steps):
+                fig, ax = plt.subplots(figsize=(2, 2))
+                ax.imshow(np.transpose(filtr_sin[i]), cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
+                ax.axis('off')
+
+                placeholder.pyplot(fig, use_container_width=True)
+                sleep(1/steps)
+
+    _, cl1, cl2, __ = st.columns(4)
+    with cl1:
+        with st.spinner("Computing the reconstructed image..."):
+            reconstructed = compute_reconstruction(img_array, sinogram[-1], steps=steps,
+                                                   span=st.session_state.get('l', '120'),
                                                    num_rays=st.session_state.get('n', '250'), max_angle=180, intermediate=True)
 
-        vmin = np.percentile(reconstructed, 1)
-        vmax = np.percentile(reconstructed, 99)
-
+        vmin = np.percentile(reconstructed[-1], 1)
+        vmax = np.percentile(reconstructed[-1], 99)
         if anim == False:
             fig2, ax2 = plt.subplots(figsize=(2, 2))
             ax2.imshow(reconstructed[st.session_state.get("step", 0) - 1], cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
@@ -321,184 +476,44 @@ elif st.session_state.page == "third":
                 ax.axis('off')
 
                 placeholder.pyplot(fig, use_container_width=True)
-                sleep(1/steps)
-
-            anim = False
-
-    st.success("Proces zakończony!")
-
-    kernel = create_shepp_logan_kernel(9)
-
-    # ds = pydicom.dcmread(st.session_state.get("uploaded_file", None))
-    # # ds = st.session_state.get("ds", 1)
-    # print(ds)
-
-    c1, c2 = st.columns(2)
-
-    with c1:
-
-        patient_name = st.text_input("Patient Name")
-        patient_id = st.text_input("Patient ID")
-        study_date = st.date_input("Study Date", value=datetime.date.today())
-        comments = st.text_input("Comments")
-
-        image_array = (reconstructed / np.max(reconstructed) * 65535).astype(np.uint16)
-
-        if st.button("Save DICOM"):
-            save_as_dicom(image_array, "zapisane_dicom.dcm", patient_name, patient_id, study_date, comments)
-    with c2:
-        st.write(st.session_state.get("name", None))
-
-    if st.button("Back to Main Page"):
-        go_to_page("main")
-
-elif st.session_state.page == "second":
-    st.title("Simulation")
-
-    st.write("filtr")
-
-    st.markdown(f"**Delta Alpha:** {st.session_state.get('alpha', 'Not Set')}, **n:** {st.session_state.get('n', 'Not Set')}, **l:** {st.session_state.get('l', 'Not Set')}")
-
-    st.image(st.session_state.image, caption="Model", use_container_width=False)
-    col1, col2 = st.columns(2)
-
-    with col1:
-        img_array = np.array(st.session_state.image.convert("L")).astype(np.float32)
-
-        steps = 180 // st.session_state.alpha
-
-        with st.spinner("Obliczanie sinogramu..."):
-            sinogram = compute_sinogram(img_array, steps=steps, span=st.session_state.get('l', '120'),
-                                        num_rays=st.session_state.get('n', '250'), max_angle=180, intermediate=True)
-
-        sin = np.transpose(sinogram[steps - 1])
-
-        vmin = np.percentile(sin, 1)
-        vmax = np.percentile(sin, 99)
-
-        # st.session_state.step = int(st.session_state.get("step", "Not Set") - 1)
-        # st.write(st.session_state.get())
-
-        # st.session_state.step = st.slider("step", min_value=1, max_value=steps, value=steps)
-        #
-        # if st.button("show animation"):
-        #     anim = True
-
-        if anim == False:
-            # st.write(anim)
-            fig, ax = plt.subplots(figsize=(2, 2))
-            # st.write(st.session_state.get("step", 0) - 1)
-            ax.imshow(np.transpose(sinogram[st.session_state.get("step", 0) - 1]), cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
-            ax.axis('off')
-
-            # st.session_state.step = st.session_state.get("step", "Not Set") - 1
-
-            st.pyplot(fig, use_container_width=False)
-
-        elif anim == True:
-            placeholder = st.empty()  # Create a placeholder
-            for i in range(steps):
-                # st.write("anim", anim)
-                fig, ax = plt.subplots(figsize=(2, 2))
-                # st.write(st.session_state.get("step", 0) - 1)
-                ax.imshow(np.transpose(sinogram[i]), cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
-                ax.axis('off')
-
-                placeholder.pyplot(fig, use_container_width=False)
-                sleep(1/steps)
-
-            anim = False
-
-            # st.session_state.step = st.session_state.get("step", "Not Set") - 1
-    with col2:
-        img_array = np.array(st.session_state.image.convert("L")).astype(np.float32)
-
-        steps = 180 // st.session_state.alpha
-
-        with st.spinner("Obliczanie sinogramu z filtrem..."):
-            filtr_sin = compute_filter(sinogram[-1])
-
-        vmin = np.percentile(filtr_sin, 1)
-        vmax = np.percentile(filtr_sin, 99)
-
-        # st.session_state.step = int(st.session_state.get("step", "Not Set") - 1)
-        # st.write(st.session_state.get())
-
-        # st.session_state.step = st.slider("step", min_value=1, max_value=steps, value=steps)
-
-        # if st.button("show animation"):
-        #     anim = True
-
-        # if anim == False:
-        #     st.write(anim)
-        fig, ax = plt.subplots(figsize=(2, 2))
-            # st.write(st.session_state.get("step", 0) - 1)
-        ax.imshow(np.transpose(filtr_sin), cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
-        ax.axis('off')
-
-            # st.session_state.step = st.session_state.get("step", "Not Set") - 1
-
-        st.pyplot(fig, use_container_width=False)
-
-        # elif anim == True:
-        #     placeholder = st.empty()  # Create a placeholder
-        #     for i in range(steps):
-        #         # st.write("anim", anim)
-        #         fig, ax = plt.subplots(figsize=(2, 2))
-        #         # st.write(st.session_state.get("step", 0) - 1)
-        #         ax.imshow(np.transpose(sinogram[i]), cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
-        #         ax.axis('off')
-        #
-        #         placeholder.pyplot(fig, use_container_width=True)
-        #         sleep(1/steps)
-        #
-        #     anim = False
-
-            # st.session_state.step = st.session_state.get("step", "Not Set") - 1
-
-    cl1, cl2 = st.columns(2)
-    with cl1:
-        with st.spinner("Obliczanie rekonstrukcji..."):
-            reconstructed = compute_reconstruction(img_array, sinogram[steps - 1], steps=steps, span=st.session_state.get('l', '120'),
-                                                   num_rays=st.session_state.get('n', '250'), max_angle=180)
-
-        vmin = np.percentile(reconstructed, 1)
-        vmax = np.percentile(reconstructed, 99)
-
-        fig2, ax2 = plt.subplots(figsize=(2, 2))
-        ax2.imshow(reconstructed, cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
-        ax2.axis('off')
-
-        st.pyplot(fig2, use_container_width=False)
+                sleep(1 / steps)
 
     with cl2:
-        with st.spinner("Obliczanie rekonstrukcji z filtrem..."):
-            filtr_reconstructed = compute_reconstruction(img_array, filtr_sin, steps=steps, span=st.session_state.get('l', '120'),
-                                                   num_rays=st.session_state.get('n', '250'), max_angle=180)
+        with st.spinner("Computing the reconstructed image with filter..."):
+            filtr_reconstructed = compute_reconstruction(img_array, filtr_sin[-1], steps=steps,
+                                                         span=st.session_state.get('l', '120'),
+                                                         num_rays=st.session_state.get('n', '250'), max_angle=180, intermediate=True)
 
-        vmin = np.percentile(filtr_reconstructed, 1)
-        vmax = np.percentile(filtr_reconstructed, 99)
+        vmin = np.percentile(filtr_reconstructed[-1], 1)
+        vmax = np.percentile(filtr_reconstructed[-1], 99)
 
-        fig2, ax2 = plt.subplots(figsize=(2, 2))
-        ax2.imshow(filtr_reconstructed, cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
-        ax2.axis('off')
+        if anim == False:
+            fig2, ax2 = plt.subplots(figsize=(2, 2))
+            ax2.imshow(filtr_reconstructed[st.session_state.get("step", 0) - 1], cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
+            ax2.axis('off')
 
-        st.pyplot(fig2, use_container_width=False)
+            st.pyplot(fig2, use_container_width=True)
 
-    st.success("Proces zakończony!")
+        else:
+            placeholder = st.empty()
+            for i in range(steps):
+                fig, ax = plt.subplots(figsize=(2, 2))
+                ax.imshow(filtr_reconstructed[i], cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
+                ax.axis('off')
 
-    kernel = create_shepp_logan_kernel(9)
+                placeholder.pyplot(fig, use_container_width=True)
+                sleep(1 / steps)
 
+            anim = False
 
-    # if st.button("Show iterative simulation"):
-    #     pass
+    st.success("Process finished!")
 
     patient_name = st.text_input("Patient Name")
     patient_id = st.text_input("Patient ID")
     study_date = st.date_input("Study Date", value=datetime.date.today())
     comments = st.text_input("Comments")
 
-    image_array = (reconstructed / np.max(reconstructed) * 65535).astype(np.uint16)
+    image_array = (filtr_reconstructed[-1] / np.max(filtr_reconstructed[-1]) * 65535).astype(np.uint16)
 
     if st.button("Save DICOM"):
         save_as_dicom(image_array, "zapisane_dicom.dcm", patient_name, patient_id, study_date, comments)
@@ -506,5 +521,166 @@ elif st.session_state.page == "second":
     if st.button("Back to Main Page"):
         go_to_page("main")
 
+elif st.session_state.page == "fourth":
+    st.title("Simulation")
 
+    st.write("filtr")
 
+    st.markdown(
+        f"**Delta Alpha:** {st.session_state.get('alpha', 'Not Set')}, **n:** {st.session_state.get('n', 'Not Set')}, **l:** {st.session_state.get('l', 'Not Set')}")
+
+    steps = 180 // st.session_state.alpha
+    st.session_state.step = st.slider("step", min_value=1, max_value=steps, value=steps)
+    if st.button("show animation"):
+        anim = True
+
+    col1, col2, col3, _ = st.columns(4)
+
+    with col1:
+        st.image(st.session_state.image, caption="Model", use_container_width=True)
+
+    with col2:
+        img_array = np.array(st.session_state.image.convert("L")).astype(np.float32)
+
+        steps = 180 // st.session_state.alpha
+
+        with st.spinner("Computing the sinogram..."):
+            sinogram = compute_sinogram(img_array, steps=steps, span=st.session_state.get('l', '120'),
+                                        num_rays=st.session_state.get('n', '250'), max_angle=180, intermediate=True)
+
+        sin = np.transpose(sinogram[-1])
+
+        vmin = np.percentile(sin, 1)
+        vmax = np.percentile(sin, 99)
+
+        if anim == False:
+            fig, ax = plt.subplots(figsize=(2, 2))
+            ax.imshow(np.transpose(sinogram[st.session_state.get("step", 0) - 1]), cmap="gray", aspect='auto',
+                      vmin=vmin, vmax=vmax)
+            ax.axis('off')
+
+            st.pyplot(fig, use_container_width=True)
+
+        elif anim == True:
+            placeholder = st.empty()
+            for i in range(steps):
+                fig, ax = plt.subplots(figsize=(2, 2))
+                ax.imshow(np.transpose(sinogram[i]), cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
+                ax.axis('off')
+
+                placeholder.pyplot(fig, use_container_width=True)
+                sleep(1 / steps)
+
+    with col3:
+        img_array = np.array(st.session_state.image.convert("L")).astype(np.float32)
+
+        steps = 180 // st.session_state.alpha
+
+        with st.spinner("Computing the sinogram with filter..."):
+            filtr_sin = compute_filter(sinogram)
+
+        vmin = np.percentile(filtr_sin[-1], 1)
+        vmax = np.percentile(filtr_sin[-1], 99)
+
+        if anim == False:
+            fig, ax = plt.subplots(figsize=(2, 2))
+            ax.imshow(np.transpose(filtr_sin[st.session_state.get("step", 0) - 1]), cmap="gray", aspect='auto',
+                      vmin=vmin, vmax=vmax)
+            ax.axis('off')
+            st.pyplot(fig, use_container_width=True)
+
+        elif anim == True:
+            placeholder = st.empty()
+            for i in range(steps):
+                fig, ax = plt.subplots(figsize=(2, 2))
+                ax.imshow(np.transpose(filtr_sin[i]), cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
+                ax.axis('off')
+
+                placeholder.pyplot(fig, use_container_width=True)
+                sleep(1 / steps)
+
+    _, cl1, cl2, __ = st.columns(4)
+    with cl1:
+        with st.spinner("Computing the reconstructed image..."):
+            reconstructed = compute_reconstruction(img_array, sinogram[-1], steps=steps,
+                                                   span=st.session_state.get('l', '120'),
+                                                   num_rays=st.session_state.get('n', '250'), max_angle=180,
+                                                   intermediate=True)
+
+        vmin = np.percentile(reconstructed[-1], 1)
+        vmax = np.percentile(reconstructed[-1], 99)
+        if anim == False:
+            fig2, ax2 = plt.subplots(figsize=(2, 2))
+            ax2.imshow(reconstructed[st.session_state.get("step", 0) - 1], cmap="gray", aspect='auto', vmin=vmin,
+                       vmax=vmax)
+            ax2.axis('off')
+
+            st.pyplot(fig2, use_container_width=True)
+
+        else:
+            placeholder = st.empty()
+            for i in range(steps):
+                fig, ax = plt.subplots(figsize=(2, 2))
+                ax.imshow(reconstructed[i], cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
+                ax.axis('off')
+
+                placeholder.pyplot(fig, use_container_width=True)
+                sleep(1 / steps)
+
+    with cl2:
+        with st.spinner("Computing the reconstructed image with filter..."):
+            filtr_reconstructed = compute_reconstruction(img_array, filtr_sin[-1], steps=steps,
+                                                         span=st.session_state.get('l', '120'),
+                                                         num_rays=st.session_state.get('n', '250'), max_angle=180,
+                                                         intermediate=True)
+
+        vmin = np.percentile(filtr_reconstructed[-1], 1)
+        vmax = np.percentile(filtr_reconstructed[-1], 99)
+
+        if anim == False:
+            fig2, ax2 = plt.subplots(figsize=(2, 2))
+            ax2.imshow(filtr_reconstructed[st.session_state.get("step", 0) - 1], cmap="gray", aspect='auto', vmin=vmin,
+                       vmax=vmax)
+            ax2.axis('off')
+
+            st.pyplot(fig2, use_container_width=True)
+
+        else:
+            placeholder = st.empty()
+            for i in range(steps):
+                fig, ax = plt.subplots(figsize=(2, 2))
+                ax.imshow(filtr_reconstructed[i], cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
+                ax.axis('off')
+
+                placeholder.pyplot(fig, use_container_width=True)
+                sleep(1 / steps)
+
+            anim = False
+
+    st.success("Process finished!")
+
+    cc1, cc2 = st.columns(2)
+
+    with cc1:
+        st.write("Input patient's data")
+
+        patient_name = st.text_input("Patient Name")
+        patient_id = st.text_input("Patient ID")
+        study_date = st.date_input("Study Date", value=datetime.date.today())
+        comments = st.text_input("Comments")
+
+        image_array = (filtr_reconstructed[-1] / np.max(filtr_reconstructed[-1]) * 65535).astype(np.uint16)
+
+        if st.button("Save DICOM"):
+            save_as_dicom(image_array, "zapisane_dicom.dcm", patient_name, patient_id, study_date, comments)
+
+    with cc2:
+        st.write("Patient's name from .dcm file")
+
+        st.text_input("Name", st.session_state.get("name", None), disabled=True)
+        st.text_input("ID", st.session_state.get("id", None), disabled=True)
+        st.text_input("Date", st.session_state.get("date", None), disabled=True)
+        st.text_input("Comments", st.session_state.get("comm", None), disabled=True)
+
+    if st.button("Back to Main Page"):
+        go_to_page("main")
