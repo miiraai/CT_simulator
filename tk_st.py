@@ -213,6 +213,7 @@ elif st.session_state.page == "first":
             ax.axis('off')
 
             st.pyplot(fig, use_container_width=True)
+            plt.close()
 
         elif anim == True:
             placeholder = st.empty()
@@ -222,6 +223,7 @@ elif st.session_state.page == "first":
                 ax.axis('off')
 
                 placeholder.pyplot(fig, use_container_width=True)
+                plt.close()
                 sleep(1 / steps)
 
     with col3:
@@ -241,6 +243,7 @@ elif st.session_state.page == "first":
             ax2.axis('off')
 
             st.pyplot(fig2, use_container_width=True)
+            plt.close()
 
         else:
             placeholder = st.empty()
@@ -251,6 +254,7 @@ elif st.session_state.page == "first":
 
                 placeholder.pyplot(fig, use_container_width=True)
                 sleep(1 / steps)
+                plt.close()
 
             anim = False
 
@@ -263,7 +267,8 @@ elif st.session_state.page == "first":
     study_date = st.date_input("Study Date", value=datetime.date.today())
     comments = st.text_input("Comments")
 
-    image_array = (reconstructed[-1] / np.max(reconstructed[-1]) * 65535).astype(np.uint16)
+    clipped = np.clip(reconstructed[-1], vmin, vmax)
+    image_array = ((clipped - vmin) / (vmax - vmin) * 65535).astype(np.uint16)
 
     if st.button("Save DICOM"):
         save_as_dicom(image_array, "zapisane_dicom.dcm", patient_name, patient_id, study_date, comments)
@@ -287,6 +292,7 @@ elif st.session_state.page == "third":
 
     with col1:
         st.image(st.session_state.image, caption="Model", use_container_width=True)
+
     with col2:
         img_array = np.array(st.session_state.image.convert("L")).astype(np.float32)
 
@@ -306,6 +312,7 @@ elif st.session_state.page == "third":
             ax.axis('off')
 
             st.pyplot(fig, use_container_width=True)
+            plt.close()
 
         elif anim == True:
             placeholder = st.empty()
@@ -316,6 +323,7 @@ elif st.session_state.page == "third":
 
                 placeholder.pyplot(fig, use_container_width=True)
                 sleep(1 / steps)
+                plt.close()
 
     with col3:
         with st.spinner("Computing the reconstructed image..."):
@@ -334,6 +342,7 @@ elif st.session_state.page == "third":
             ax2.axis('off')
 
             st.pyplot(fig2, use_container_width=True)
+            plt.close()
 
         else:
             placeholder = st.empty()
@@ -344,6 +353,7 @@ elif st.session_state.page == "third":
 
                 placeholder.pyplot(fig, use_container_width=True)
                 sleep(1 / steps)
+                plt.close()
 
             anim = False
 
@@ -359,7 +369,8 @@ elif st.session_state.page == "third":
         study_date = st.date_input("Study Date", value=datetime.date.today())
         comments = st.text_input("Comments")
 
-        image_array = (reconstructed[-1] / np.max(reconstructed[-1]) * 65535).astype(np.uint16)
+        clipped = np.clip(reconstructed[-1], vmin, vmax)
+        image_array = ((clipped - vmin) / (vmax - vmin) * 65535).astype(np.uint16)
 
         if st.button("Save DICOM"):
             save_as_dicom(image_array, "zapisane_dicom.dcm", patient_name, patient_id, study_date, comments)
@@ -393,6 +404,7 @@ elif st.session_state.page == "second":
     with col1:
         st.image(st.session_state.image, caption="Model", use_container_width=True)
 
+
     with col2:
         img_array = np.array(st.session_state.image.convert("L")).astype(np.float32)
 
@@ -414,6 +426,7 @@ elif st.session_state.page == "second":
             ax.axis('off')
 
             st.pyplot(fig, use_container_width=True)
+            plt.close()
 
         elif anim == True:
             placeholder = st.empty()
@@ -424,6 +437,7 @@ elif st.session_state.page == "second":
 
                 placeholder.pyplot(fig, use_container_width=True)
                 sleep(1 / steps)
+                plt.close()
 
     with col3:
         img_array = np.array(st.session_state.image.convert("L")).astype(np.float32)
@@ -441,6 +455,7 @@ elif st.session_state.page == "second":
             ax.imshow(np.transpose(filtr_sin[st.session_state.get("step", 0) - 1]), cmap="gray", aspect='auto', vmin=vmin, vmax=vmax)
             ax.axis('off')
             st.pyplot(fig, use_container_width=True)
+            plt.close()
 
         elif anim == True:
             placeholder = st.empty()
@@ -451,6 +466,7 @@ elif st.session_state.page == "second":
 
                 placeholder.pyplot(fig, use_container_width=True)
                 sleep(1/steps)
+                plt.close()
 
     _, cl1, cl2, __ = st.columns(4)
     with cl1:
@@ -467,6 +483,7 @@ elif st.session_state.page == "second":
             ax2.axis('off')
 
             st.pyplot(fig2, use_container_width=True)
+            plt.close()
 
         else:
             placeholder = st.empty()
@@ -477,6 +494,7 @@ elif st.session_state.page == "second":
 
                 placeholder.pyplot(fig, use_container_width=True)
                 sleep(1 / steps)
+                plt.close()
 
     with cl2:
         with st.spinner("Computing the reconstructed image with filter..."):
@@ -493,6 +511,7 @@ elif st.session_state.page == "second":
             ax2.axis('off')
 
             st.pyplot(fig2, use_container_width=True)
+            plt.close()
 
         else:
             placeholder = st.empty()
@@ -503,6 +522,7 @@ elif st.session_state.page == "second":
 
                 placeholder.pyplot(fig, use_container_width=True)
                 sleep(1 / steps)
+                plt.close()
 
             anim = False
 
@@ -513,7 +533,8 @@ elif st.session_state.page == "second":
     study_date = st.date_input("Study Date", value=datetime.date.today())
     comments = st.text_input("Comments")
 
-    image_array = (filtr_reconstructed[-1] / np.max(filtr_reconstructed[-1]) * 65535).astype(np.uint16)
+    clipped = np.clip(filtr_reconstructed[-1], vmin, vmax)
+    image_array = ((clipped - vmin) / (vmax - vmin) * 65535).astype(np.uint16)
 
     if st.button("Save DICOM"):
         save_as_dicom(image_array, "zapisane_dicom.dcm", patient_name, patient_id, study_date, comments)
@@ -560,6 +581,7 @@ elif st.session_state.page == "fourth":
             ax.axis('off')
 
             st.pyplot(fig, use_container_width=True)
+            plt.close()
 
         elif anim == True:
             placeholder = st.empty()
@@ -570,6 +592,7 @@ elif st.session_state.page == "fourth":
 
                 placeholder.pyplot(fig, use_container_width=True)
                 sleep(1 / steps)
+                plt.close()
 
     with col3:
         img_array = np.array(st.session_state.image.convert("L")).astype(np.float32)
@@ -588,6 +611,7 @@ elif st.session_state.page == "fourth":
                       vmin=vmin, vmax=vmax)
             ax.axis('off')
             st.pyplot(fig, use_container_width=True)
+            plt.close()
 
         elif anim == True:
             placeholder = st.empty()
@@ -598,6 +622,7 @@ elif st.session_state.page == "fourth":
 
                 placeholder.pyplot(fig, use_container_width=True)
                 sleep(1 / steps)
+                plt.close()
 
     _, cl1, cl2, __ = st.columns(4)
     with cl1:
@@ -616,6 +641,7 @@ elif st.session_state.page == "fourth":
             ax2.axis('off')
 
             st.pyplot(fig2, use_container_width=True)
+            plt.close()
 
         else:
             placeholder = st.empty()
@@ -626,6 +652,7 @@ elif st.session_state.page == "fourth":
 
                 placeholder.pyplot(fig, use_container_width=True)
                 sleep(1 / steps)
+                plt.close()
 
     with cl2:
         with st.spinner("Computing the reconstructed image with filter..."):
@@ -644,6 +671,7 @@ elif st.session_state.page == "fourth":
             ax2.axis('off')
 
             st.pyplot(fig2, use_container_width=True)
+            plt.close()
 
         else:
             placeholder = st.empty()
@@ -654,6 +682,7 @@ elif st.session_state.page == "fourth":
 
                 placeholder.pyplot(fig, use_container_width=True)
                 sleep(1 / steps)
+                plt.close()
 
             anim = False
 
@@ -669,7 +698,8 @@ elif st.session_state.page == "fourth":
         study_date = st.date_input("Study Date", value=datetime.date.today())
         comments = st.text_input("Comments")
 
-        image_array = (filtr_reconstructed[-1] / np.max(filtr_reconstructed[-1]) * 65535).astype(np.uint16)
+        clipped = np.clip(filtr_reconstructed[-1], vmin, vmax)
+        image_array = ((clipped - vmin) / (vmax - vmin) * 65535).astype(np.uint16)
 
         if st.button("Save DICOM"):
             save_as_dicom(image_array, "zapisane_dicom.dcm", patient_name, patient_id, study_date, comments)
