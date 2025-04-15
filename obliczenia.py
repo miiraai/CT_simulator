@@ -171,8 +171,8 @@ def reverse_radon_transform(img, sinogram, steps, span, num_rays, max_angle, int
                 # Tylko dla punktów zawierających się w sinogramie
                 if (0 <= point[0] < img.shape[0]) and (0 <= point[1] < img.shape[1]):
                     out_image[point[0]][point[1]] += sinogram[idx][ray_idx]
-                    if intermediate:
-                        iterations.append(copy.deepcopy(out_image))
+        if intermediate:
+            iterations.append(copy.deepcopy(out_image))
 
     if intermediate:
         return iterations
